@@ -1,7 +1,8 @@
 #!/bin/sh
 
 ####
-extnic="eth1"
+intnic="eth1"
+extnic="eth2"
 public="10.0.1.0/24"
 gateway="10.0.1.254"
 pool=("10.0.1.100" "10.0.1.199")
@@ -9,7 +10,7 @@ nameserver="8.8.8.8"
 private=("192.168.101.0/24" "192.168.102.0/24")
 ####
 
-function prereboot {
+function controller {
     if ! md5sum --check ./images/Fedora18-cloud-init.qcow2.md5; then
         for s in $( ls ./images/x* ); do
             cat $s >> ./images/Fedora18-cloud-init.qcow2
@@ -19,11 +20,21 @@ function prereboot {
     export FACTER_PWD=$PWD
     puppet apply \
         --modulepath=./modules \
-        --execute "class {'setup::prereboot': extnic => ${extnic}}"
+        --execute \
+        "class {'setup::prereboot': intnic => ${intnic}, extnic => ${extnic}}"
     return $?
 }
 
-function postreboot {
+function compute {
+    export FACTER_PWD=$PWD
+    puppet apply \
+        --modulepath=./modules \
+        --execute \
+        "class {'setup::prereboot': intnic => ${intnic}, extnic => 'none'}"
+    return $?
+}
+
+function configproject {
     . /root/keystonerc_admin
 
     #
@@ -96,20 +107,36 @@ function main {
         exit
     fi
 
-    if [[ $1 == "prereboot" ]]; then
-        prereboot
+    case $1 in
+      "configproject")
+        configproject
+        echo "Done."
+        ;;
+
+      "controller")
+        controller
         rc=$?
         if [[ $rc -eq 0 ]]; then
             echo "Done. Now you need to reboot the server."
         else
             echo "Failed."
         fi
-    elif [[ $1 == "postreboot" ]]; then
-        postreboot
-        echo "Done."
-    else
-        echo "Usage: $cmd prereboot|postreboot"
-    fi
+        ;;
+
+      "compute")
+        compute
+        rc=$?
+        if [[ $rc -eq 0 ]]; then
+            echo "Done. Now you need to reboot the server."
+        else
+            echo "Failed."
+        fi
+        ;;
+
+      *)
+        echo "Usage: $cmd controller|compute|configproject"
+        ;;
+    esac
 }
 
 ##

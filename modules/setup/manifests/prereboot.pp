@@ -1,20 +1,57 @@
-class setup::prereboot ( $extnic = 'eth0') {
-  include setup::selinux
-  include setup::iptables
-  include setup::bridgemodule
-  include setup::libvirtnet
-  include setup::roothelper_patch
-  include setup::prepimage
-  class {'setup::addport': extnic => $extnic } 
+class setup::prereboot (
+  $node = 'controller',
+  $intnic = 'eth1',
+  $extnic = 'eth2'
+) {
+  if $node == 'controller' {
+    include setup::selinux
+    include setup::iptables
+    include setup::libvirtnet
+    include setup::quickpatches
+    include setup::prepimage
+    include setup::stopcompute
 
-  package { 'vim-enhanced':
-    ensure => 'installed',
+    class { 'setup::bridgemodule':
+      bridge_nf_call => 1,
+    }
+
+    class {'setup::addport':
+      intnic => $intnic,
+      extnic => $extnic,
+    } 
+
+    package { 'vim-enhanced':
+      ensure => 'installed',
+    }
+  }
+
+  elsif $node == 'compute' {
+    include setup::selinux
+    include setup::iptables
+    include setup::libvirtnet
+    include setup::quickpatches
+
+    class { 'setup::bridgemodule':
+      bridge_nf_call => 0,
+    }
+
+    class {'setup::addport':
+      intnic => $intnic,
+      extnic => 'none',
+    } 
   }
 }
 
 class setup::selinux {
   selinux::config { 'permissive':
     ensure => 'permissive',
+  }
+}
+
+class setup::stopcompute {
+  service { 'openstack-nova-compute':
+    ensure   => 'stopped',
+    enable   => 'false',
   }
 }
 
@@ -31,7 +68,7 @@ class setup::iptables {
   }
 }
 
-class setup::bridgemodule {
+class setup::bridgemodule ( $bridge_nf_call = '1' ) {
   $content = '#!/bin/sh
 modprobe -b bridge >/dev/null 2>&1
 exit 0
@@ -44,13 +81,13 @@ exit 0
   }
 
   sysctl::value { 'net.bridge.bridge-nf-call-ip6tables':
-    value => '1'
+    value => $bridge_nf_call
   }
   sysctl::value { 'net.bridge.bridge-nf-call-iptables':
-    value => '1'
+    value => $bridge_nf_call
   }
   sysctl::value { 'net.bridge.bridge-nf-call-arptables':
-    value => '1',
+    value => $bridge_nf_call
   }
 }
 
@@ -61,10 +98,17 @@ class setup::libvirtnet {
   }
 }
 
-class setup::addport ( $extnic ) {
-  exec { "ovs-vsctl add-port br-ex ${extnic}":
+class setup::addport ( $intnic, $extnic ) {
+  exec { "ovs-vsctl add-port br-priv ${intnic}":
     path => '/usr/bin',
-    unless => "ovs-vsctl list-ports br-ex | grep ${extnic}",
+    unless => "ovs-vsctl list-ports br-priv | grep ${intnic}",
+  }
+
+  if $exitnic != 'none' {
+    exec { "ovs-vsctl add-port br-ex ${extnic}":
+      path => '/usr/bin',
+      unless => "ovs-vsctl list-ports br-ex | grep ${extnic}",
+    }
   }
 
   exec { 'openstack-config --set /etc/quantum/quantum.conf DEFAULT ovs_use_veth True':
@@ -72,8 +116,10 @@ class setup::addport ( $extnic ) {
   }
 }
 
-class setup::roothelper_patch {
-  define applypatch {
+class setup::quickpatches {
+
+  #https://bugzilla.redhat.com/show_bug.cgi?id=972239
+  define apply_root_helper_patch {
     exec { "sed -i.bak \"s/self\\.conf\\.root_helper/self\\.root_helper/\" ${name}":
       path   => '/bin',
       onlyif => "grep self.conf.root_helper ${name}",
@@ -86,7 +132,18 @@ class setup::roothelper_patch {
     '/usr/lib/python2.*/site-packages/quantum/agent/l3_agent.py',
   ]
 
-  applypatch { $files: }
+
+  apply_root_helper_patch { $files: }
+
+  # https://bugzilla.redhat.com/show_bug.cgi?id=977786
+  package { 'qpid-cpp-server-ha':
+    ensure => 'installed',
+  }    
+
+  exec { "sed -i.bak 's/cluster-mechanism/ha-mechanism/' /etc/qpidd.conf":
+    path   => '/bin',
+    onlyif => 'grep cluster-mechanism /etc/qpidd.conf',
+  }
 }
 
 class setup::prepimage {
@@ -105,3 +162,4 @@ class setup::prepimage {
     require => File['/var/www/html/images'],
   }
 }
+
