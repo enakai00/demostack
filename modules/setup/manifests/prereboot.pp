@@ -3,7 +3,7 @@ class setup::prereboot ( $extnic = 'eth0') {
   include setup::iptables
   include setup::bridgemodule
   include setup::libvirtnet
-  include setup::roothelper_patch
+  include setup::quickpatches
   include setup::prepimage
   class {'setup::addport': extnic => $extnic } 
 
@@ -72,8 +72,10 @@ class setup::addport ( $extnic ) {
   }
 }
 
-class setup::roothelper_patch {
-  define applypatch {
+class setup::quickpatches {
+
+  #https://bugzilla.redhat.com/show_bug.cgi?id=972239
+  define apply_root_helper_patch {
     exec { "sed -i.bak \"s/self\\.conf\\.root_helper/self\\.root_helper/\" ${name}":
       path   => '/bin',
       onlyif => "grep self.conf.root_helper ${name}",
@@ -86,7 +88,18 @@ class setup::roothelper_patch {
     '/usr/lib/python2.*/site-packages/quantum/agent/l3_agent.py',
   ]
 
-  applypatch { $files: }
+
+  apply_root_helper_patch { $files: }
+
+  # https://bugzilla.redhat.com/show_bug.cgi?id=977786
+  package { 'qpid-cpp-server-ha':
+    ensure => 'installed',
+  }
+
+  exec { "sed -i.bak 's/cluster-mechanism/ha-mechanism/' /etc/qpidd.conf":
+    path   => '/bin',
+    onlyif => 'grep cluster-mechanism /etc/qpidd.conf',
+  }
 }
 
 class setup::prepimage {
