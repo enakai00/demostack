@@ -1,13 +1,14 @@
 class setup::prereboot (
   $nodetype = 'controller',
-  $intnic = 'eth1',
-  $extnic = 'eth2'
+  $extnic = 'eth1',
+  $intnic = 'eth2'
 ) {
   if $nodetype == 'controller' {
     include setup::selinux
     include setup::iptables
     include setup::libvirtnet
-    include setup::quickpatches
+    include setup::quickpatch1
+    include setup::quickpatch2
     include setup::prepimage
     include setup::controller_setting
 
@@ -29,7 +30,7 @@ class setup::prereboot (
     include setup::selinux
     include setup::iptables
     include setup::libvirtnet
-    include setup::quickpatches
+    include setup::quickpatch1
 
     class { 'setup::bridgemodule':
       bridge_nf_call => 0,
@@ -50,16 +51,36 @@ class setup::selinux {
 
 class setup::controller_setting {
   service { 'openstack-nova-compute':
-    ensure   => 'stopped',
-    enable   => 'false',
+    ensure => 'stopped',
+    enable => 'false',
   }
 
-  exec { 'openstack-config --set /etc/quantum/plugin.ini OVS network_vlan_ranges physnet1,physnet2:100:199':
-    path => '/usr/bin',
+  define restart_service {
+    service { "${name}": 
+      ensure    => 'running',
+      enable    => 'true',
+      subscribe => [Exec['set_vlan_range'], Exec['set_bridge_mappings']],
+    }
   }
 
-  exec { 'openstack-config --set /etc/quantum/plugin.ini OVS bridge_mappings physnet1:br-ex,physnet2:br-priv':
-    path => '/usr/bin',
+  $services = [
+    'quantum-dhcp-agent',
+    'quantum-l3-agent',
+    'quantum-metadata-agent',
+    'quantum-openvswitch-agent',
+    'quantum-server',
+  ]
+
+  restart_service { $services: }
+
+  exec { 'set_vlan_range':
+    command => 'openstack-config --set /etc/quantum/plugin.ini OVS network_vlan_ranges physnet1,physnet2:100:199',
+    path    => '/usr/bin',
+  }
+
+  exec { 'set_bridge_mappings':
+    command => 'openstack-config --set /etc/quantum/plugin.ini OVS bridge_mappings physnet1:br-ex,physnet2:br-priv',
+    path    => '/usr/bin',
   }
 }
 
@@ -124,8 +145,7 @@ class setup::addport ( $intnic, $extnic ) {
   }
 }
 
-class setup::quickpatches {
-
+class setup::quickpatch1 {
   #https://bugzilla.redhat.com/show_bug.cgi?id=972239
   define apply_root_helper_patch {
     exec { "sed -i.bak \"s/self\\.conf\\.root_helper/self\\.root_helper/\" ${name}":
@@ -140,17 +160,25 @@ class setup::quickpatches {
     '/usr/lib/python2.*/site-packages/quantum/agent/l3_agent.py',
   ]
 
-
   apply_root_helper_patch { $files: }
+}
 
+class setup::quickpatch2 {
   # https://bugzilla.redhat.com/show_bug.cgi?id=977786
   package { 'qpid-cpp-server-ha':
     ensure => 'installed',
   }    
 
+  service { 'qpidd':
+    ensure  => 'running',
+    enable  => 'true',
+    require => Package['qpid-cpp-server-ha'],
+  }
+
   exec { "sed -i.bak 's/cluster-mechanism/ha-mechanism/' /etc/qpidd.conf":
     path   => '/bin',
     onlyif => 'grep cluster-mechanism /etc/qpidd.conf',
+    notify => Service['qpidd'],
   }
 }
 

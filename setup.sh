@@ -22,7 +22,7 @@ function controller {
         --modulepath=./modules \
         --execute \
         "class {'setup::prereboot': \
-            nodetype => 'controller', intnic => ${intnic}, extnic => ${extnic}}"
+            nodetype => 'controller', extnic => ${extnic}, intnic => ${intnic}}"
     return $?
 }
 
@@ -32,7 +32,7 @@ function compute {
         --modulepath=./modules \
         --execute \
         "class {'setup::prereboot': \
-            nodetype => 'compute', intnic => ${intnic}, extnic => 'none'}"
+            nodetype => 'controller', extnic => 'none', intnic => ${intnic}}"
     return $?
 }
 
