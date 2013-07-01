@@ -1,15 +1,15 @@
 class setup::prereboot (
-  $node = 'controller',
+  $nodetype = 'controller',
   $intnic = 'eth1',
   $extnic = 'eth2'
 ) {
-  if $node == 'controller' {
+  if $nodetype == 'controller' {
     include setup::selinux
     include setup::iptables
     include setup::libvirtnet
     include setup::quickpatches
     include setup::prepimage
-    include setup::stopcompute
+    include setup::controller_setting
 
     class { 'setup::bridgemodule':
       bridge_nf_call => 1,
@@ -25,7 +25,7 @@ class setup::prereboot (
     }
   }
 
-  elsif $node == 'compute' {
+  elsif $nodetype == 'compute' {
     include setup::selinux
     include setup::iptables
     include setup::libvirtnet
@@ -48,10 +48,18 @@ class setup::selinux {
   }
 }
 
-class setup::stopcompute {
+class setup::controller_setting {
   service { 'openstack-nova-compute':
     ensure   => 'stopped',
     enable   => 'false',
+  }
+
+  exec { 'openstack-config --set /etc/quantum/plugin.ini OVS network_vlan_ranges physnet1,physnet2:100:199':
+    path => '/usr/bin',
+  }
+
+  exec { 'openstack-config --set /etc/quantum/plugin.ini OVS bridge_mappings physnet1:br-ex,physnet2:br-priv':
+    path => '/usr/bin',
   }
 }
 
@@ -104,7 +112,7 @@ class setup::addport ( $intnic, $extnic ) {
     unless => "ovs-vsctl list-ports br-priv | grep ${intnic}",
   }
 
-  if $exitnic != 'none' {
+  if $extnic != 'none' {
     exec { "ovs-vsctl add-port br-ex ${extnic}":
       path => '/usr/bin',
       unless => "ovs-vsctl list-ports br-ex | grep ${extnic}",

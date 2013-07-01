@@ -11,7 +11,7 @@ private=("192.168.101.0/24" "192.168.102.0/24")
 ####
 
 function controller {
-    if ! md5sum --check ./images/Fedora18-cloud-init.qcow2.md5; then
+    if ! md5sum --check --status ./images/Fedora18-cloud-init.qcow2.md5; then
         for s in $( ls ./images/x* ); do
             cat $s >> ./images/Fedora18-cloud-init.qcow2
         done
@@ -21,7 +21,8 @@ function controller {
     puppet apply \
         --modulepath=./modules \
         --execute \
-        "class {'setup::prereboot': intnic => ${intnic}, extnic => ${extnic}}"
+        "class {'setup::prereboot': \
+            nodetype => 'controller', intnic => ${intnic}, extnic => ${extnic}}"
     return $?
 }
 
@@ -30,7 +31,8 @@ function compute {
     puppet apply \
         --modulepath=./modules \
         --execute \
-        "class {'setup::prereboot': intnic => ${intnic}, extnic => 'none'}"
+        "class {'setup::prereboot': \
+            nodetype => 'compute', intnic => ${intnic}, extnic => 'none'}"
     return $?
 }
 
@@ -69,7 +71,9 @@ function configproject {
     tenant=$(keystone tenant-list | awk '/ services / {print $2}')
     quantum net-create \
         --tenant-id $tenant ext-network --shared \
-        --provider:network_type local --router:external=True
+        --provider:network_type flat \
+        --provider:physical_network physnet1 \
+        --router:external=True
     quantum subnet-create \
         --tenant-id $tenant --gateway ${gateway} --disable-dhcp \
         --allocation-pool start=${pool[0]},end=${pool[1]} \
@@ -87,9 +91,13 @@ function configproject {
     #
     for (( i = 0; i < ${#private[@]}; ++i )); do
         name=$(printf "private%02d" $(( i + 1 )))
+        vlanid=$(printf "1%02d" $(( i + 1 )))
         subnet=${private[i]}
         quantum net-create \
-            --tenant-id $tenant ${name} --provider:network_type local
+            --tenant-id $tenant ${name} \
+            --provider:network_type vlan \
+            --provider:physical_network physnet2 \
+            --provider:segmentation_id ${vlanid}
         quantum subnet-create \
             --tenant-id $tenant --name ${name}-subnet \
             --dns-nameserver ${nameserver} ${name} ${subnet}
@@ -140,5 +148,5 @@ function main {
 }
 
 ##
-main $@
+main "$@"
 
