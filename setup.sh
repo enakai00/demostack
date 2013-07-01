@@ -1,8 +1,8 @@
 #!/bin/sh
 
 ####
-intnic="eth1"
-extnic="eth2"
+extnic="eth1"
+intnic="eth2"
 public="10.0.1.0/24"
 gateway="10.0.1.254"
 pool=("10.0.1.100" "10.0.1.199")
