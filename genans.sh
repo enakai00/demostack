@@ -12,6 +12,10 @@ function controller {
 
 function compute {
     node=$1
+    if [[ ! -f controller.txt ]]; then
+        echo "You need controller.txt."
+        exit 1
+    fi
     cp -f controller.txt compute.txt
 
     sed -i 's/CONFIG_CINDER_INSTALL=.*/CONFIG_CINDER_INSTALL=n/' compute.txt
