@@ -32,7 +32,7 @@ function compute {
         --modulepath=./modules \
         --execute \
         "class {'setup::prereboot': \
-            nodetype => 'controller', extnic => 'none', intnic => ${intnic}}"
+            nodetype => 'compute', extnic => 'none', intnic => ${intnic}}"
     return $?
 }
 
