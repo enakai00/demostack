@@ -12,13 +12,7 @@ function controller {
 
 function compute {
     node=$1
-    packstack --gen-answer-file=compute.txt
-    cp compute.txt compute.txt.orig
-
-    sed -i 's/CONFIG_CINDER_VOLUMES_CREATE=.*/CONFIG_CINDER_VOLUMES_CREATE=n/' compute.txt
-    sed -i 's/CONFIG_QUANTUM_OVS_TENANT_NETWORK_TYPE=.*/CONFIG_QUANTUM_OVS_TENANT_NETWORK_TYPE=vlan/' compute.txt
-    sed -i 's/CONFIG_QUANTUM_OVS_VLAN_RANGES=.*/CONFIG_QUANTUM_OVS_VLAN_RANGES=physnet2:100:199/' compute.txt
-    sed -i 's/CONFIG_QUANTUM_OVS_BRIDGE_MAPPINGS=.*/CONFIG_QUANTUM_OVS_BRIDGE_MAPPINGS=physnet2:br-priv/' compute.txt
+    cp -f controller.txt compute.txt
 
     sed -i 's/CONFIG_CINDER_INSTALL=.*/CONFIG_CINDER_INSTALL=n/' compute.txt
     sed -i 's/CONFIG_HORIZON_INSTALL=.*/CONFIG_HORIZON_INSTALL=n/' compute.txt
