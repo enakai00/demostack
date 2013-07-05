@@ -1,9 +1,9 @@
-class setup::prereboot ( $extnic = 'eth0') {
-  include setup::selinux
+class setup::prereboot ( $extnic = 'eth0' ) {
+#  include setup::selinux
   include setup::iptables
   include setup::bridgemodule
   include setup::libvirtnet
-  include setup::quickpatches
+#  include setup::quickpatches
   include setup::prepimage
   class {'setup::addport': extnic => $extnic } 
 
@@ -22,12 +22,6 @@ class setup::iptables {
   service { 'iptables':
     ensure  => 'running',
     enable  => 'true',
-    require => Service['firewalld'],
-  }
-
-  service { 'firewalld':
-    ensure => 'stopped',
-    enable => 'false',
   }
 }
 
@@ -63,12 +57,8 @@ class setup::libvirtnet {
 
 class setup::addport ( $extnic ) {
   exec { "ovs-vsctl add-port br-ex ${extnic}":
-    path => '/usr/bin',
+    path => ['/usr/bin', '/bin'],
     unless => "ovs-vsctl list-ports br-ex | grep ${extnic}",
-  }
-
-  exec { 'openstack-config --set /etc/quantum/quantum.conf DEFAULT ovs_use_veth True':
-    path => '/usr/bin',
   }
 }
 
@@ -88,18 +78,7 @@ class setup::quickpatches {
     '/usr/lib/python2.*/site-packages/quantum/agent/l3_agent.py',
   ]
 
-
   apply_root_helper_patch { $files: }
-
-  # https://bugzilla.redhat.com/show_bug.cgi?id=977786
-  package { 'qpid-cpp-server-ha':
-    ensure => 'installed',
-  }
-
-  exec { "sed -i.bak 's/cluster-mechanism/ha-mechanism/' /etc/qpidd.conf":
-    path   => '/bin',
-    onlyif => 'grep cluster-mechanism /etc/qpidd.conf',
-  }
 }
 
 class setup::prepimage {
@@ -118,3 +97,4 @@ class setup::prepimage {
     require => File['/var/www/html/images'],
   }
 }
+

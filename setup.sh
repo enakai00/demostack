@@ -42,14 +42,14 @@ function postreboot {
     #
     # initialize quantum db
     #
-    quantum_services=$(systemctl list-unit-files --type=service \
-        | grep -E 'quantum\S+\s+enabled' | cut -d" " -f1)
+    quantum_services=$(chkconfig --list \
+        | grep -E '^quantum-.*[[:space:]]+3:on' | awk '{print $1}')
 
-    for s in ${quantum_services}; do systemctl stop $s; done
+    for s in ${quantum_services}; do service $s stop; done
     mysqladmin -f drop ovs_quantum
     mysqladmin create ovs_quantum
     quantum-netns-cleanup
-    for s in $quantum_services; do systemctl start $s; done
+    for s in $quantum_services; do service $s start; done
     sleep 5
 
     #
@@ -114,4 +114,3 @@ function main {
 
 ##
 main $@
-
